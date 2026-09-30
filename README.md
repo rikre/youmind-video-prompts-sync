@@ -190,6 +190,22 @@ or video URLs — those belong to their original creators and to YouMind / X. Yo
 responsible for how you use the tool and for complying with the target site's terms of
 service. Be polite: the defaults are deliberately slow.
 
+
+## Development
+
+```bash
+./scripts/check.sh     # python + shell syntax, SKILL.md manifest, secret scan, rate guard
+```
+
+That is the same set of assertions the GitHub Actions workflow runs. CI needs the
+`workflow` OAuth scope, which the default `gh` login does not request — a
+`.github/workflows/ci.yml` is kept in the tree but untracked until you enable it:
+
+```bash
+gh auth refresh --hostname github.com -s workflow
+git add .github && git commit -m "ci: add GitHub Actions check" && git push
+```
+
 ## License
 
 [MIT](LICENSE)

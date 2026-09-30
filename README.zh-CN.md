@@ -182,6 +182,22 @@ Linux 用 cron：
 原始创作者以及 YouMind / X。使用方式和是否遵守目标站点条款由你自己负责。
 请保持克制：默认速率是刻意调慢的。
 
+
+## 开发
+
+```bash
+./scripts/check.sh     # Python/Shell 语法、SKILL.md 清单、敏感串扫描、限速守卫
+```
+
+这套检查和 GitHub Actions 跑的是同一套断言。CI 需要 `workflow` OAuth 权限，
+而 `gh` 默认登录不带这个 scope，所以 `.github/workflows/ci.yml` 先放在工作区未跟踪，
+想启用时执行：
+
+```bash
+gh auth refresh --hostname github.com -s workflow
+git add .github && git commit -m "ci: add GitHub Actions check" && git push
+```
+
 ## License
 
 [MIT](LICENSE)
