@@ -1,0 +1,368 @@
+[
+ {
+  "name": "标题",
+  "type": "text"
+ },
+ {
+  "name": "提示词ID",
+  "type": "number",
+  "style": {
+   "type": "plain",
+   "precision": 0
+  }
+ },
+ {
+  "name": "Slug",
+  "type": "text"
+ },
+ {
+  "name": "来源板块",
+  "type": "select",
+  "options": [
+   {
+    "name": "每周最热",
+    "hue": "Red"
+   },
+   {
+    "name": "Seedance 2.0 库",
+    "hue": "Blue"
+   },
+   {
+    "name": "Seedance 2.5 库",
+    "hue": "Turquoise"
+   }
+  ]
+ },
+ {
+  "name": "模型类型",
+  "type": "select",
+  "options": [
+   {
+    "name": "Seedance 2.0",
+    "hue": "Blue"
+   },
+   {
+    "name": "Seedance 2.5",
+    "hue": "Turquoise"
+   },
+   {
+    "name": "Grok Imagine",
+    "hue": "Purple"
+   },
+   {
+    "name": "Claude Opus 5.5",
+    "hue": "Orange"
+   }
+  ]
+ },
+ {
+  "name": "作者",
+  "type": "text"
+ },
+ {
+  "name": "作者主页",
+  "type": "text",
+  "style": {
+   "type": "url"
+  }
+ },
+ {
+  "name": "封面图",
+  "type": "text",
+  "style": {
+   "type": "url"
+  }
+ },
+ {
+  "name": "视频链接",
+  "type": "text",
+  "style": {
+   "type": "url"
+  }
+ },
+ {
+  "name": "视频标题",
+  "type": "text"
+ },
+ {
+  "name": "详情页链接",
+  "type": "text",
+  "style": {
+   "type": "url"
+  }
+ },
+ {
+  "name": "原始来源推文",
+  "type": "text",
+  "style": {
+   "type": "url"
+  }
+ },
+ {
+  "name": "提示词简介",
+  "type": "text"
+ },
+ {
+  "name": "原始提示词",
+  "type": "text"
+ },
+ {
+  "name": "中文译文",
+  "type": "text"
+ },
+ {
+  "name": "原始语言",
+  "type": "select",
+  "options": [
+   {
+    "name": "zh",
+    "hue": "Red"
+   },
+   {
+    "name": "en",
+    "hue": "Blue"
+   },
+   {
+    "name": "ja",
+    "hue": "Orange"
+   },
+   {
+    "name": "ko",
+    "hue": "Purple"
+   },
+   {
+    "name": "other",
+    "hue": "Gray"
+   }
+  ]
+ },
+ {
+  "name": "分类标签",
+  "type": "select",
+  "multiple": true,
+  "options": [
+   {
+    "name": "电影级场景展示",
+    "hue": "Blue"
+   },
+   {
+    "name": "Vlog / 生活记录",
+    "hue": "Blue"
+   },
+   {
+    "name": "短片",
+    "hue": "Blue"
+   },
+   {
+    "name": "音乐视频",
+    "hue": "Blue"
+   },
+   {
+    "name": "品牌 / 产品广告",
+    "hue": "Blue"
+   },
+   {
+    "name": "UGC / 口播广告",
+    "hue": "Blue"
+   },
+   {
+    "name": "讲解 / 教程",
+    "hue": "Blue"
+   },
+   {
+    "name": "频道片头 / 品牌素材",
+    "hue": "Blue"
+   },
+   {
+    "name": "游戏宣传片 / PV",
+    "hue": "Blue"
+   },
+   {
+    "name": "电影级写实风格",
+    "hue": "Turquoise"
+   },
+   {
+    "name": "奇幻 / 魔法",
+    "hue": "Turquoise"
+   },
+   {
+    "name": "赛博朋克 / 科幻",
+    "hue": "Turquoise"
+   },
+   {
+    "name": "动漫",
+    "hue": "Turquoise"
+   },
+   {
+    "name": "复古 / 怀旧胶片",
+    "hue": "Turquoise"
+   },
+   {
+    "name": "超现实 / 梦境",
+    "hue": "Turquoise"
+   },
+   {
+    "name": "纪录片",
+    "hue": "Turquoise"
+   },
+   {
+    "name": "3D 卡通",
+    "hue": "Turquoise"
+   },
+   {
+    "name": "2D 动画",
+    "hue": "Turquoise"
+   },
+   {
+    "name": "中国水墨",
+    "hue": "Turquoise"
+   },
+   {
+    "name": "定格动画",
+    "hue": "Turquoise"
+   },
+   {
+    "name": "人物 / 角色",
+    "hue": "Orange"
+   },
+   {
+    "name": "运动 / 动作",
+    "hue": "Orange"
+   },
+   {
+    "name": "自然 / 风景",
+    "hue": "Orange"
+   },
+   {
+    "name": "建筑 / 室内",
+    "hue": "Orange"
+   },
+   {
+    "name": "抽象 / VFX",
+    "hue": "Orange"
+   },
+   {
+    "name": "城市 / 街景",
+    "hue": "Orange"
+   },
+   {
+    "name": "动物 / 宠物",
+    "hue": "Orange"
+   },
+   {
+    "name": "交通工具",
+    "hue": "Orange"
+   },
+   {
+    "name": "文字 / Logo",
+    "hue": "Orange"
+   },
+   {
+    "name": "人群 / 群体",
+    "hue": "Orange"
+   },
+   {
+    "name": "美食 / 饮品",
+    "hue": "Orange"
+   },
+   {
+    "name": "产品",
+    "hue": "Orange"
+   }
+  ]
+ },
+ {
+  "name": "发布时间",
+  "type": "datetime",
+  "style": {
+   "format": "yyyy-MM-dd HH:mm"
+  }
+ },
+ {
+  "name": "浏览量",
+  "type": "number",
+  "style": {
+   "type": "plain",
+   "precision": 0,
+   "thousands_separator": true
+  }
+ },
+ {
+  "name": "点赞量",
+  "type": "number",
+  "style": {
+   "type": "plain",
+   "precision": 0,
+   "thousands_separator": true
+  }
+ },
+ {
+  "name": "评论量",
+  "type": "number",
+  "style": {
+   "type": "plain",
+   "precision": 0,
+   "thousands_separator": true
+  }
+ },
+ {
+  "name": "分享量",
+  "type": "number",
+  "style": {
+   "type": "plain",
+   "precision": 0,
+   "thousands_separator": true
+  }
+ },
+ {
+  "name": "收藏量",
+  "type": "number",
+  "style": {
+   "type": "plain",
+   "precision": 0,
+   "thousands_separator": true
+  }
+ },
+ {
+  "name": "引用量",
+  "type": "number",
+  "style": {
+   "type": "plain",
+   "precision": 0,
+   "thousands_separator": true
+  }
+ },
+ {
+  "name": "素材类型",
+  "type": "select",
+  "options": [
+   {
+    "name": "视频",
+    "hue": "Green"
+   },
+   {
+    "name": "图片",
+    "hue": "Gray"
+   },
+   {
+    "name": "无素材",
+    "hue": "Gray"
+   }
+  ]
+ },
+ {
+  "name": "是否精选",
+  "type": "checkbox"
+ },
+ {
+  "name": "每周最热",
+  "type": "checkbox"
+ },
+ {
+  "name": "入库时间",
+  "type": "created_at",
+  "style": {
+   "format": "yyyy-MM-dd HH:mm"
+  }
+ }
+]

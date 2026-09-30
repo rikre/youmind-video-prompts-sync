@@ -1,0 +1,30 @@
+# runtime state / scraped data — never commit
+.youmind-sync/
+data/
+*.jsonl
+*.jsonl.gz
+records.json
+records.csv
+records.csv.gz
+categories.json
+weekly.json
+weekly.html
+_payload.json
+pushed*.txt
+state.json
+config.json
+sync.log
+logs/
+
+# python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+
+# editors / os
+.DS_Store
+.idea/
+.vscode/
+*.swp
