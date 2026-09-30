@@ -214,6 +214,37 @@ def enumerate_incremental(known, max_pages=200):
     return all_items, fresh
 
 
+def enumerate_since(since_iso, max_pages=60):
+    """Date-window sweep using `sortBy=publishedAt` — cheap incremental discovery.
+
+    `publishedAt` DOES work, unlike `id`/`createdAt`: from the 7th item of page 1
+    onward the feed is strictly date-descending. The first few items on page 1 are
+    a pinned `featured` block carrying old dates, so the stop rule cannot be
+    "the page's oldest item is older than `since`" — it has to be "no item on this
+    page is newer than `since`". A quiet day costs one or two requests.
+
+    Returns every prompt found in the window (not just unseen ones); the caller
+    still de-duplicates against the ids already in the Bitable.
+    """
+    found = []
+    for model, label in MODELS:
+        for p in range(1, max_pages + 1):
+            d = api_page(model, p, sort_by="publishedAt")
+            plist = d.get("prompts", [])
+            if not plist:
+                break
+            for i, it in enumerate(plist):
+                it["_model"] = label
+                it["_modelKey"] = model
+                it["_rank"] = (p - 1) * 50 + i
+            found.extend(plist)
+            if not any((it.get("sourcePublishedAt") or "") >= since_iso for it in plist):
+                log("  %s: page %d has nothing newer than %s, stop"
+                    % (model, p, since_iso[:10]))
+                break
+    return found
+
+
 STAT_RE = re.compile(
     r'>(点赞|浏览|分享|评论|收藏|引用)</span></div><div class="[^"]*">([^<]*)</div>')
 CAT_RE = re.compile(r'href="[^"]*\?categories=([a-z0-9\-]+)"[^>]*>([^<]+)</a>')

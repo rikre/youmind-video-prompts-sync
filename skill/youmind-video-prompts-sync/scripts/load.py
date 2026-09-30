@@ -24,6 +24,9 @@ BATCH = 100
 MAX_TEXT = 60000
 IDENTITY = os.environ.get("YOUMIND_IDENTITY", "bot")
 
+# lark-cli profile (multi-tenant): when set, every lark-cli call gets --profile <p>
+PROFILE = os.environ.get("YOUMIND_PROFILE", "")
+
 MODEL_MAP = {
     "seedance-2.0": "Seedance 2.0",
     "seedance-2.5": "Seedance 2.5",
@@ -42,10 +45,16 @@ def _config():
     return cfg
 
 
+def profile_args():
+    """`--profile X` for every lark-cli call, or [] when running on the default app."""
+    p = PROFILE or _config().get("profile") or ""
+    return ["--profile", str(p)] if p else []
+
+
 def base_token():
     v = os.environ.get("YOUMIND_BASE_TOKEN") or _config().get("base_token")
     if not v:
-        raise SystemExit("缺少 base_token：请先跑 scripts/setup_base.sh，"
+        raise SystemExit("缺少 base_token：先跑 scripts/setup_base.sh，"
                          "或设置 YOUMIND_BASE_TOKEN / config.json")
     return v
 
@@ -53,7 +62,7 @@ def base_token():
 def table_id():
     v = os.environ.get("YOUMIND_TABLE_ID") or _config().get("table_id")
     if not v:
-        raise SystemExit("缺少 table_id：请先跑 scripts/setup_base.sh，"
+        raise SystemExit("缺少 table_id：先跑 scripts/setup_base.sh，"
                          "或设置 YOUMIND_TABLE_ID / config.json")
     return v
 
@@ -209,7 +218,10 @@ def push(rows, start=0, limit=None, done_file=None, identity=None, quiet=False):
     if os.path.exists(done_file):
         pushed = set(int(x) for x in open(done_file).read().split() if x.strip())
     end = len(rows) if limit is None else min(len(rows), start + limit)
-    payload_path = os.path.join(OUT, "_payload.json")
+    # lark-cli only accepts @file payloads from the CWD, /tmp or ~/files, and the
+    # data dir is usually none of those — so stage the batch under /tmp.
+    # (tempfile.gettempdir() is /var/folders/... on macOS and would be rejected.)
+    payload_path = "/tmp/youmind-payload-%d.json" % os.getpid()
     sent = 0
     for i in range(start, end, BATCH):
         if i in pushed:
@@ -220,7 +232,7 @@ def push(rows, start=0, limit=None, done_file=None, identity=None, quiet=False):
         ok = False
         for attempt in range(5):
             r = subprocess.run(
-                ["lark-cli", "base", "+record-batch-create",
+                ["lark-cli", *profile_args(), "base", "+record-batch-create",
                  "--base-token", base_token(), "--table-id", table_id(),
                  "--json", "@" + payload_path, "--as", identity, "--jq", ".ok"],
                 capture_output=True, text=True)
@@ -266,7 +278,7 @@ def known_ids_from_base(identity=None, progress=False):
     ids, offset, page = set(), 0, 200
     while True:
         r = subprocess.run(
-            ["lark-cli", "base", "+record-list",
+            ["lark-cli", *profile_args(), "base", "+record-list",
              "--base-token", base_token(), "--table-id", table_id(),
              "--field-id", "提示词ID", "--limit", str(page),
              "--offset", str(offset), "--as", identity, "--format", "json"],

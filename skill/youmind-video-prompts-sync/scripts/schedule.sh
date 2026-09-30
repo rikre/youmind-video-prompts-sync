@@ -30,6 +30,10 @@ install_job() {
   local py_dir
   py_dir="$(dirname "${PYTHON}")"
 
+  local PROFILE_ENV=""
+  [ -n "${YOUMIND_PROFILE:-}" ] && \
+    PROFILE_ENV="    <key>YOUMIND_PROFILE</key><string>${YOUMIND_PROFILE}</string>"
+
   cat > "${PLIST}" <<PLISTEOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -46,6 +50,7 @@ install_job() {
   <dict>
     <key>PATH</key><string>$py_dir:$lark_dir:/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     <key>YOUMIND_DATA_DIR</key><string>${DATA_DIR}</string>
+${PROFILE_ENV}
   </dict>
   <key>StartCalendarInterval</key>
   <dict><key>Hour</key><integer>$((10#$hh))</integer><key>Minute</key><integer>$((10#$mm))</integer></dict>

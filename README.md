@@ -66,7 +66,9 @@ After that, `python3 sync.py` is the daily incremental (about 2–3 minutes).
 
 | Command | What it does | Cost |
 |---|---|---|
-| `sync.py` | incremental: sweep for new prompts → fetch details → push → rotate the weekly-hot flag | ~3 min |
+| `sync.py` | incremental by **publish-date window**: read the newest date in the table, sweep only what is newer | **~6 s** |
+| `sync.py --since 7d` | explicit window (`7d`, or `2026-09-01`) | seconds |
+| `sync.py --sweep-all` | fall back to a full views-ordered sweep | ~2 min |
 | `sync.py --full` | enumerate both libraries, push everything missing | ~10 min |
 | `sync.py --refresh-top` | also refresh engagement stats for the top N per model | +10 min |
 | `sync.py --backfill-categories` | re-run the 32-category reverse lookup | ~10 min |
@@ -102,10 +104,12 @@ Exit code `0` = success, `1` = failure, so a scheduler can alert on it.
 2. **Engagement stats are Top-N only by default.** The list API does not return them; each one
    costs a detail-page fetch. Default is the 500 most-viewed per model. Go wider with
    `DETAIL_TOP=3000 python3 sync.py --refresh-top`.
-3. **There is no cheap "newest first" feed.** The API silently ignores
-   `sortBy=id/createdAt/publishedAt` (they all fall back to the same editorial order), and a
-   freshly published prompt has too few views to reach the head of the views ranking. So the
-   incremental job sweeps the whole library (~158 requests / ~2 min) instead of paging once.
+3. **`sortBy=publishedAt` works — but page 1 opens with a pinned block.** `id` and `createdAt`
+   are silently ignored (they fall back to the editorial order), yet `publishedAt desc` is a
+   genuine date-descending feed *from the 7th item of page 1 onward*; the first few items are
+   `featured` picks carrying old dates. So the stop rule must be "this page has nothing newer
+   than the watermark", never "this page's oldest item is older than the watermark" — the
+   latter stops on page 1 and silently misses everything. A quiet day costs 1–2 requests.
 
 ## Requirements
 
@@ -160,7 +164,7 @@ Everything lives in `~/.youmind-sync/` (override with `YOUMIND_DATA_DIR`):
 
 | File | Purpose |
 |---|---|
-| `config.json` | `base_token`, `table_id`, `identity` |
+| `config.json` | `base_token`, `table_id`, `identity`, `profile`, `window_days` |
 | `state.json` | synced ids, weekly-hot ids, last run result |
 | `prompts_list.jsonl` | raw list-API metadata checkpoint |
 | `prompts_full.jsonl` | detail-page stats + categories |
@@ -168,7 +172,19 @@ Everything lives in `~/.youmind-sync/` (override with `YOUMIND_DATA_DIR`):
 | `sync.log` | run log |
 
 Environment overrides: `YOUMIND_DATA_DIR`, `YOUMIND_BASE_TOKEN`, `YOUMIND_TABLE_ID`,
-`YOUMIND_IDENTITY`, `SCRAPE_RATE`, `SCRAPE_WORKERS`, `DETAIL_TOP`.
+`YOUMIND_IDENTITY`, `YOUMIND_PROFILE`, `YOUMIND_WINDOW_DAYS`, `SCRAPE_RATE`, `SCRAPE_WORKERS`,
+`DETAIL_TOP`.
+
+### Multi-tenant targets
+
+If the Bitable lives in a different tenant, point `profile` at the matching `lark-cli` profile
+(`lark-cli profile list`); every lark-cli call then gets `--profile <p>`. A **wiki** link has to
+be resolved first — its token is a wiki node token, not a base token:
+
+```bash
+lark-cli --profile <p> base +url-resolve --url "<wiki url>" --as bot
+# base_token <- data.base_token      table_id <- data.block_id
+```
 
 **Idempotent.** If `state.json` is lost the sync reads the `提示词ID` values already in your
 Bitable and treats them as known, so nothing is ever double-inserted.

@@ -13,6 +13,7 @@ DATA_DIR="${YOUMIND_DATA_DIR:-$HOME/.youmind-sync}"
 BASE_NAME="${1:-${BASE_NAME:-YouMind 视频提示词库}}"
 TABLE_NAME="${TABLE_NAME:-视频提示词}"
 IDENTITY="${YOUMIND_IDENTITY:-bot}"
+PROFILE="${YOUMIND_PROFILE:-}"
 
 mkdir -p "${DATA_DIR}"
 
@@ -21,9 +22,12 @@ if ! command -v lark-cli >/dev/null 2>&1; then
   exit 1
 fi
 
+PROFILE_ARGS=()
+[ -n "${PROFILE}" ] && PROFILE_ARGS=(--profile "${PROFILE}")
+
 FIELDS="$(cat "${HERE}/fields.json")"
 echo "▶ 正在创建多维表格「${BASE_NAME}」…"
-OUT="$(lark-cli base +base-create \
+OUT="$(lark-cli "${PROFILE_ARGS[@]}" base +base-create \
         --name "${BASE_NAME}" \
         --table-name "${TABLE_NAME}" \
         --fields "$FIELDS" \
@@ -35,7 +39,7 @@ d = json.load(sys.stdin).get("data") or {}
 b = d.get("base") or {}
 t = d.get("table") or {}
 tok = b.get("base_token") or b.get("app_token") or d.get("app_token") or ""
-url = b.get("url") or ("https://feishu.cn/base/" + tok if tok else "-")
+url = b.get("url") or ("https://feishu.cn/base/" + tok if tok else "")
 print(tok, url or "-", t.get("id") or "")
 ')"
 
@@ -45,14 +49,16 @@ if [ -z "${BASE_TOKEN}" ] || [ -z "${TABLE_ID}" ]; then
   exit 1
 fi
 
-python3 - "${DATA_DIR}" "${BASE_TOKEN}" "${TABLE_ID}" "${IDENTITY}" <<'PY'
+python3 - "${DATA_DIR}" "${BASE_TOKEN}" "${TABLE_ID}" "${IDENTITY}" "${PROFILE}" <<'PY'
 import json, os, sys
-data_dir, base, table, identity = sys.argv[1:5]
+data_dir, base, table, identity, profile = sys.argv[1:6]
 p = os.path.join(data_dir, "config.json")
 cfg = {}
 if os.path.exists(p):
     cfg = json.load(open(p, encoding="utf-8"))
 cfg.update({"base_token": base, "table_id": table, "identity": identity})
+if profile:
+    cfg["profile"] = profile
 json.dump(cfg, open(p, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
 print("✔ 已写入配置：", p)
 PY

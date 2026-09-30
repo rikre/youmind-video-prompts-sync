@@ -21,8 +21,13 @@ description: 抓取 YouMind 视频提示词库（Seedance 2.0 / 2.5 全量 + 每
   全量 7874 页太贵，默认只抓**每个模型浏览量 Top 500**（共 ~1005 页），已覆盖绝大部分流量。
 - **分类标签**只出现在详情页；但列表接口支持 `videoCategoryFilters: {useCases|styles|subjects: [id]}`，
   逐个类目反查 32 次就能拿到全量 id→分类映射（`categories.py`，约 10 分钟，远快于抓 7874 个详情页）。
-- **排序陷阱**：`sortBy` 只认 `views`；`id` / `createdAt` / `publishedAt` 会被静默忽略并回落到默认
-  编辑序。所以**没有「按最新排序」的廉价增量口子**，找新条目必须整表扫一遍（约 158 请求 / 2 分钟）。
+- **排序**：`sortBy` 认 `views` 和 `publishedAt`；`id` / `createdAt` 会被静默忽略并回落到默认编辑序。
+  `publishedAt desc` 从**第 1 页第 7 条起**严格按发布时间倒序，所以有廉价的「只看最新」入口 ——
+  注意第 1 页前几条是 `featured` 置顶块，带的是老日期，判断「本页是否还有更新的」不能看页内最早一条，
+  要看**是否存在任何一条比水位新**。安静的一天只要 1～2 个请求。
+- **多租户**：目标表可能不在当前默认 app 的租户里。用 `YOUMIND_PROFILE=<lark-cli profile>`（或
+  config.json 的 `profile` 字段）切到对应租户的 app，脚本会给每个 lark-cli 调用加 `--profile`。
+  `lark-cli profile list` 可以看到本机所有 profile。
 - **Cloudflare 限流是最大的坑。** 突发并发会让整站 429 约 1 小时（实测 16 并发 15 秒即被封 58 分钟）。
   脚本内置自适应限流：默认 1.5 请求/秒，遇到 429 自动把速率降到 0.25/秒 并长退避。
   **不要把 `SCRAPE_RATE` 调到 3 以上。**
@@ -55,14 +60,22 @@ python3 sync.py
 已有表时跳过第 0/1 步，直接写 `~/.youmind-sync/config.json`：
 
 ```json
-{"base_token": "xxxx", "table_id": "tblxxxx", "identity": "bot"}
+{"base_token": "xxxx", "table_id": "tblxxxx", "identity": "bot", "profile": "", "window_days": 1}
 ```
+
+- `profile`：目标表在别的租户时，填 `lark-cli profile list` 里的 profile 名或 appId。
+  知识库（wiki）链接要先 `lark-cli base +url-resolve --url "<wiki 链接>"` 解析出真正的
+  `base_token` / `table_id`，不能把 wiki token 当 base token 用。
+- `window_days`：时间窗口往回多留几天（默认 1），防止跨时区/延迟导致漏条。
 
 ## sync.py 子命令
 
 | 命令 | 作用 | 耗时 |
 |---|---|---|
-| `sync.py` | 增量：整表扫一遍找新条目 → 抓详情 → 推送 → 同步「每周最热」勾选 | ~3 分钟 |
+| `sync.py` | **默认增量**：读表里最新的发布时间当水位，只扫这个时间之后的提示词 | **~6 秒**（预热后） |
+| `sync.py --since 2026-09-01` | 指定起始日期 | 秒级 |
+| `sync.py --since 7d` | 最近 7 天 | 秒级 |
+| `sync.py --sweep-all` | 不用时间，按浏览量整库扫一遍找新条目（兜底） | ~2 分钟 |
 | `sync.py --full` | 全量枚举 + 补齐 Base 中缺失的记录 | ~10 分钟 |
 | `sync.py --refresh-top` | 额外刷新各模型 Top N 的互动数据 | +10 分钟 |
 | `sync.py --backfill-categories` | 重跑 32 类目反查，补全分类标签 | ~10 分钟 |
@@ -70,6 +83,11 @@ python3 sync.py
 | `sync.py --status` | 打印上次运行结果 | 秒 |
 
 退出码 0 = 成功，1 = 失败（定时任务据此告警）。日志：`~/.youmind-sync/sync.log`。
+
+**时间水位怎么算**：取表里 `发布时间` 的最大值（读 1 条排序结果，不用 data-query 的 MAX ——
+它把 datetime 当秒返回，格式化会变成 1970），减去 `window_days` 天（默认 1）作为窗口起点。
+窗口内再按 `提示词ID` 去重。首次运行（`state.json` 不存在）会先花 ~40 秒从表里读回已知 ID，
+之后每轮就是几秒。
 
 ## 数据与状态
 
@@ -122,3 +140,5 @@ Linux 用 cron 替代：
 | `lark-cli ... 91403` | bot 无该表权限。把 bot 加为协作者，或 `YOUMIND_IDENTITY=user` 重试一次 |
 | 详情页 404 | 该提示词已下架；脚本记录 `_httpStatus` 并跳过，不阻塞整批 |
 | 推送批量失败 | 脚本每批重试 5 次，仍失败会非 0 退出；重跑会自动跳过已成功批次 |
+| `--json invalid JSON file path ... outside the built-in allowlist` | lark-cli 只接受 CWD / `/tmp` / `~/files` 下的 `@file`；脚本已固定把批次写到 `/tmp`（注意 macOS 的 `tempfile.gettempdir()` 是 `/var/folders/...`，会被拒） |
+| `131006 bot lacks permission for the requested resource` | app 与目标表不在同一租户，或表没共享给该 app。换 `profile`，或把 app 加为文档协作者 |

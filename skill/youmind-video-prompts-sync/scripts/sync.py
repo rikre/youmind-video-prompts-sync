@@ -47,11 +47,13 @@ STATE = os.path.join(DATA_DIR, "state.json")
 LOG = os.path.join(DATA_DIR, "sync.log")
 
 DEFAULT_CONFIG = {
-    # no defaults on purpose: fill these in ~/.youmind-sync/config.json
-    # (setup_base.sh writes that file for you)
+    # intentionally empty: setup_base.sh writes ~/.youmind-sync/config.json,
+    # or pass YOUMIND_BASE_TOKEN / YOUMIND_TABLE_ID
     "base_token": "",
     "table_id": "",
     "identity": "bot",
+    "profile": "",
+    "window_days": 1,
     "rate": 1.5,
     "workers": 4,
     "detail_top": 500,
@@ -85,12 +87,15 @@ def config():
                    ("identity", "YOUMIND_IDENTITY"),
                    ("rate", "SCRAPE_RATE"),
                    ("workers", "SCRAPE_WORKERS"),
-                   ("detail_top", "DETAIL_TOP")):
+                   ("detail_top", "DETAIL_TOP"),
+                   ("profile", "YOUMIND_PROFILE"),
+                   ("window_days", "YOUMIND_WINDOW_DAYS")):
         if os.environ.get(env):
             cfg[k] = os.environ[env]
     cfg["rate"] = float(cfg["rate"])
     cfg["workers"] = int(cfg["workers"])
     cfg["detail_top"] = int(cfg["detail_top"])
+    cfg["window_days"] = int(cfg["window_days"])
     return cfg
 
 
@@ -149,13 +154,61 @@ def append_list_jsonl(items):
                 have.add(it["id"])
 
 
+def watermark_from_base():
+    """Newest 发布时间 already in the Bitable, as an ISO string (UTC-less compare).
+
+    Reads one record sorted by 发布时间 desc instead of using a MAX aggregation:
+    data-query returns the datetime as epoch *seconds*, which formats badly.
+    """
+    import subprocess
+    r = subprocess.run(
+        ["lark-cli", *loader.profile_args(), "base", "+record-list",
+         "--base-token", loader.base_token(), "--table-id", loader.table_id(),
+         "--field-id", "发布时间", "--sort-json", '[{"field":"发布时间","desc":true}]',
+         "--limit", "1", "--as", loader.IDENTITY, "--format", "json"],
+        capture_output=True, text=True)
+    try:
+        d = json.loads((r.stdout or "")[r.stdout.index("{"):])["data"]
+        rows = d.get("data") or []
+        if rows and isinstance(rows[0], list):
+            v = rows[0][0]
+        else:
+            v = ((d.get("items") or [{}])[0].get("fields") or {}).get("发布时间")
+        return str(v)[:19].replace("T", " ") if v else None
+    except Exception:
+        return None
+
+
+def resolve_since(spec, watermark=None):
+    """'7d' | '2026-09-01' | None -> ISO string to compare against sourcePublishedAt (UTC).
+
+    Source timestamps are UTC; the Bitable stores +08:00. Shift by -8h so both
+    sides live in the same clock before comparing.
+    """
+    import datetime as _dt
+    if spec and spec.endswith("d") and spec[:-1].isdigit():
+        base = _dt.datetime.utcnow() - _dt.timedelta(days=int(spec[:-1]))
+        return base.strftime("%Y-%m-%dT%H:%M:%S")
+    if spec:
+        return spec.strip()[:10] + "T00:00:00"
+    if watermark:
+        try:
+            w = _dt.datetime.strptime(watermark[:19], "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return None
+        w -= _dt.timedelta(hours=8)                      # +08:00 -> UTC
+        w -= _dt.timedelta(days=int(os.environ.get("YOUMIND_WINDOW_DAYS", "0")))
+        return w.strftime("%Y-%m-%dT%H:%M:%S")
+    return None
+
+
 def set_weekly_flags(set_true, set_false=()):
     """Flip the 每周最热 checkbox on already-synced rows (weekly hot rotates)."""
     import subprocess
 
     def record_id_for(pid):
         r = subprocess.run(
-            ["lark-cli", "base", "+record-list",
+            ["lark-cli", *loader.profile_args(), "base", "+record-list",
              "--base-token", loader.base_token(), "--table-id", loader.table_id(),
              "--filter-json",
              json.dumps({"logic": "and", "conditions": [["提示词ID", "==", pid]]}),
@@ -173,7 +226,7 @@ def set_weekly_flags(set_true, set_false=()):
         if not rid:
             continue
         r = subprocess.run(
-            ["lark-cli", "base", "+record-batch-update",
+            ["lark-cli", *loader.profile_args(), "base", "+record-batch-update",
              "--base-token", loader.base_token(), "--table-id", loader.table_id(),
              "--json", json.dumps({"record_id_list": [rid],
                                    "patch": {"每周最热": val}}, ensure_ascii=False),
@@ -192,17 +245,23 @@ def main():
     ap.add_argument("--dry-run", action="store_true", help="只报告，不写入飞书")
     ap.add_argument("--status", action="store_true", help="打印状态后退出")
     ap.add_argument("--max-pages", type=int, default=240, help="增量枚举最多翻多少页")
+    ap.add_argument("--since", metavar="DATE|Nd", default=None,
+                    help="只同步这个时间之后发布的提示词，如 2026-09-01 或 7d；"
+                         "默认用表里最新的发布时间自动推算")
+    ap.add_argument("--sweep-all", action="store_true",
+                    help="按浏览量整库扫描找新条目（不依赖发布时间排序）")
     args = ap.parse_args()
 
     cfg = config()
     if not cfg["base_token"] or not cfg["table_id"]:
-        log("FAIL 未配置多维表格。先跑 scripts/setup_base.sh 建表，"
-            "或在 ${DATA_DIR}/config.json 里填 base_token / table_id，"
-            "或用 YOUMIND_BASE_TOKEN / YOUMIND_TABLE_ID 传入。")
+        log("FAIL 未配置多维表格：先跑 scripts/setup_base.sh 建表，"
+            "或写 ~/.youmind-sync/config.json，或用 YOUMIND_BASE_TOKEN / YOUMIND_TABLE_ID 传入")
         return 1
     os.environ.setdefault("YOUMIND_BASE_TOKEN", str(cfg["base_token"]))
     os.environ.setdefault("YOUMIND_TABLE_ID", str(cfg["table_id"]))
     loader.IDENTITY = str(cfg["identity"])
+    loader.PROFILE = str(cfg.get("profile") or "")
+    os.environ.setdefault("YOUMIND_WINDOW_DAYS", str(cfg.get("window_days", 1)))
     pipeline.set_rate(cfg["rate"])
     pipeline.RATE = cfg["rate"]
     pipeline.WORKERS = cfg["workers"]
@@ -235,9 +294,30 @@ def main():
     if args.full or len(known) < 100:
         items = pipeline.enumerate_all()
         new_items = [it for it in items if it["id"] not in known]
-    else:
+        log("full enumeration: %d prompts, %d new" % (len(items), len(new_items)))
+    elif args.sweep_all:
         items, new_items = pipeline.enumerate_incremental(known, max_pages=args.max_pages)
-        log("sweep found %d prompts, %d of them new" % (len(items), len(new_items)))
+        log("full sweep: %d prompts, %d new" % (len(items), len(new_items)))
+    else:
+        # time-window mode: only look at what was published after the watermark
+        wm = None
+        if not args.since:
+            wm = watermark_from_base()
+            log("table watermark (newest 发布时间): %s" % wm)
+        since = resolve_since(args.since, wm)
+        if not since:
+            log("no watermark available -> falling back to a full sweep")
+            items, new_items = pipeline.enumerate_incremental(known, max_pages=args.max_pages)
+        else:
+            log("time-window: published after %s (window_days=%s)"
+                % (since, cfg.get("window_days", 1)))
+            window = pipeline.enumerate_since(since, max_pages=args.max_pages)
+            in_window = [it for it in window
+                         if (it.get("sourcePublishedAt") or "") >= since]
+            new_items = [it for it in in_window if it["id"] not in known]
+            log("window held %d prompts (%d inside the window), %d new"
+                % (len(window), len(in_window), len(new_items)))
+            items = window
     if new_items:
         append_list_jsonl(new_items)
 
@@ -292,6 +372,7 @@ def main():
         st["last_run"] = now()
         st["last_run_ok"] = True
         st["last_new"] = len(new_ids)
+        st.pop("last_error", None)
         st["last_pushed"] = pushed
         st["total_synced"] = len(st["synced_ids"])
         st["elapsed_sec"] = round(time.time() - t0, 1)

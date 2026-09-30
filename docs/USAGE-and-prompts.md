@@ -44,7 +44,9 @@ cd ~/.agents/skills/youmind-video-prompts-sync/scripts
 
 python3 sync.py --status      # 看同步状态（秒级）
 python3 sync.py --dry-run     # 只报告不写飞书
-python3 sync.py               # 手动增量（约 3 分钟）
+python3 sync.py               # 默认增量：只抓发布时间水位之后的（~6 秒）
+python3 sync.py --since 7d    # 最近 7 天
+python3 sync.py --sweep-all   # 兜底：不用时间，按浏览量整库扫描
 python3 sync.py --refresh-top # 顺便刷新各模型 Top 500 的互动数据
 python3 sync.py --full        # 全量枚举 + 补齐缺失记录
 python3 sync.py --backfill-categories   # 重跑 32 类目反查
@@ -106,8 +108,9 @@ Seedance 2.0 + Seedance 2.5 + Grok Imagine 三个模型，Top 500 互动数据�
 - **幂等。** `~/.youmind-sync/state.json` 丢了也不怕，会先读飞书表里已有的 `提示词ID`
   当作已知集合，不会重复写入。
 - **每周最热会翻转**：每轮同步会把不再是热门的条目取消勾选。
-- **增量要整库扫一遍**（约 2 分钟）：接口静默忽略 `sortBy=id/createdAt/publishedAt`，
-  新提示词浏览量低、排不到前面。
+- **时间窗口的停止条件有坑**：`sortBy=publishedAt` 要到第 1 页第 7 条才严格倒序，
+  前几条是 `featured` 置顶块、日期很老。停止条件要写「本页没有任何一条比水位新」，
+  不能写「本页最早一条比水位老」。
 - **Linux** 用 cron 替代 launchd：
 
   ```cron

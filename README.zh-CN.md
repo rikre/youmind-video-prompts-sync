@@ -64,7 +64,9 @@ python3 sync.py --backfill-categories  # 补全分类标签
 
 | 命令 | 作用 | 耗时 |
 |---|---|---|
-| `sync.py` | 增量：整库扫一遍找新条目 → 抓详情 → 推送 → 翻转「每周最热」 | ~3 分钟 |
+| `sync.py` | 增量：**按发布时间窗口**，读表里最新日期，只扫比它新的 | **~6 秒** |
+| `sync.py --since 7d` | 指定窗口（`7d` 或 `2026-09-01`） | 秒级 |
+| `sync.py --sweep-all` | 兜底：按浏览量整库扫描 | ~2 分钟 |
 | `sync.py --full` | 全量枚举两个库，补齐缺失记录 | ~10 分钟 |
 | `sync.py --refresh-top` | 额外刷新各模型 Top N 的互动数据 | +10 分钟 |
 | `sync.py --backfill-categories` | 重跑 32 类目反查 | ~10 分钟 |
@@ -98,9 +100,11 @@ python3 sync.py --backfill-categories  # 补全分类标签
    默认 1.5 请求/秒并带自适应退避（遇 429 降到 0.25/秒）。`SCRAPE_RATE` 不要超过 2。
 2. **互动数据默认只抓 Top N。** 列表接口不返回互动指标，每一条都要单独抓详情页。
    默认取每个模型浏览量前 500。要更宽用 `DETAIL_TOP=3000 python3 sync.py --refresh-top`。
-3. **没有「只看最新」的廉价增量口子。** 接口会静默忽略 `sortBy=id/createdAt/publishedAt`
-   （一律回落到同一个编辑序），而刚发布的提示词浏览量太低、排不进浏览量榜前面。
-   所以增量任务会整库扫一遍（约 158 请求 / 2 分钟），而不是只翻第一页。
+3. **`sortBy=publishedAt` 能用，但第 1 页开头有置顶块。** `id` 和 `createdAt` 会被静默忽略
+   （回落到编辑序），而 `publishedAt desc` 从**第 1 页第 7 条起**是真正的发布时间倒序；
+   前几条是 `featured` 精选、带的是老日期。所以停止条件必须是「本页没有任何一条比水位新」，
+   绝不能写「本页最早一条比水位老就停」—— 那样会在第 1 页就停住，静默漏掉后续所有新条目。
+   安静的一天只要 1～2 个请求。
 
 ## 依赖
 
@@ -153,7 +157,7 @@ Linux 用 cron：
 
 | 文件 | 用途 |
 |---|---|
-| `config.json` | `base_token`、`table_id`、`identity` |
+| `config.json` | `base_token`、`table_id`、`identity`、`profile`、`window_days` |
 | `state.json` | 已同步 id、每周最热 id、上次运行结果 |
 | `prompts_list.jsonl` | 列表接口原始元数据检查点 |
 | `prompts_full.jsonl` | 详情页互动数据 + 分类 |
@@ -161,7 +165,19 @@ Linux 用 cron：
 | `sync.log` | 运行日志 |
 
 环境变量：`YOUMIND_DATA_DIR`、`YOUMIND_BASE_TOKEN`、`YOUMIND_TABLE_ID`、
-`YOUMIND_IDENTITY`、`SCRAPE_RATE`、`SCRAPE_WORKERS`、`DETAIL_TOP`。
+`YOUMIND_IDENTITY`、`YOUMIND_PROFILE`、`YOUMIND_WINDOW_DAYS`、`SCRAPE_RATE`、
+`SCRAPE_WORKERS`、`DETAIL_TOP`。
+
+### 跨租户目标表
+
+目标表在别的租户时，把 `profile` 指向对应的 `lark-cli` profile（`lark-cli profile list` 可查），
+每个 lark-cli 调用会自动带上 `--profile <p>`。
+**wiki** 链接要先解析 —— 里面的 token 是 wiki node token，不是 base token：
+
+```bash
+lark-cli --profile <p> base +url-resolve --url "<wiki 链接>" --as bot
+# base_token ← data.base_token      table_id ← data.block_id
+```
 
 **幂等。** `state.json` 丢了也不怕：同步会先读飞书表里已有的 `提示词ID` 当作已知集合，
 不会重复插入。
